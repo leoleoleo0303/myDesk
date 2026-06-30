@@ -19,12 +19,27 @@ enum class MsgType : uint8_t {
     SigPaired = 12,    // 服务器通知：配对成功，payload 空
     SigRelay = 13,     // 透传：payload 原样转发给已配对的对端（承载打洞信息）
     SigError = 14,     // 服务器错误：payload = UTF-8 错误描述
+
+    // 认证
+    AuthRequest = 20,   // viewer -> host: 请求认证
+    AuthChallenge = 21, // host -> viewer: 挑战
+    AuthResponse = 22,  // viewer -> host: 应答
+
+    // 文件传输 (30-39)
+    FileOffer = 30,      // 发送方 -> 接收方: 文件信息 (JSON: name, size, id)
+    FileAccept = 31,     // 接收方 -> 发送方: 接受传输 (JSON: id, savePath)
+    FileReject = 32,     // 接收方 -> 发送方: 拒绝传输 (JSON: id)
+    FileData = 33,       // 发送方 -> 接收方: 文件数据块 (id(4) + offset(8) + data)
+    FileComplete = 34,   // 发送方 -> 接收方: 传输完成 (JSON: id)
+    FileCancel = 35,     // 任意一方: 取消传输 (JSON: id, reason)
+
+    // 语音 (40-49)
+    AudioData = 40,      // 音频 PCM 数据帧
+    AudioControl = 41,   // 音频控制 (JSON: action: start/stop/mute/unmute)
 };
 
 // 线路格式（大端）：
 //   [type: 1 字节][length: 4 字节][payload: length 字节]
-//
-// 这样 TCP 流就能被切成一条条完整消息，避免粘包/拆包问题。
 
 // 发送一条消息（带分帧头）。
 bool sendMessage(TcpConn& conn, MsgType type, const void* payload,

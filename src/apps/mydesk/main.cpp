@@ -6,6 +6,8 @@
 //   GUI 模式 (默认): 启动图形界面，同时作为被控端和控制端
 //   Headless 模式:   mydesk --headless [--port 9000]
 //                    无界面纯服务，适合部署在服务器上
+//   Web 模式:        mydesk --web [--web-port 8080]
+//                    同时启动 Web 服务，可通过浏览器远程控制
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -25,17 +27,13 @@
 // 隐藏 Windows 下的控制台窗口（GUI 模式时）
 static void hideConsoleWindow() {
 #ifdef _WIN32
-    // 如果是从资源管理器等双击启动（有自己的控制台），隐藏它
     HWND console = GetConsoleWindow();
     if (console) {
-        // 检查是否是我们自己创建的控制台（父进程是 explorer 时通常是独立控制台）
         DWORD consoleProcessId = 0;
         GetWindowThreadProcessId(console, &consoleProcessId);
         if (consoleProcessId == GetCurrentProcessId()) {
             FreeConsole();
         } else {
-            // 由命令行启动时不隐藏，允许日志输出
-            // 但如果用户双击 exe，则隐藏
             ShowWindow(console, SW_HIDE);
         }
     }
@@ -45,9 +43,11 @@ static void hideConsoleWindow() {
 int main(int argc, char** argv) {
     rd::net::initSockets();
 
-    // 快速预扫描参数判断是否 headless 模式（避免初始化 QApplication）
+    // 快速预扫描参数
     bool headless = false;
     uint16_t port = 9000;
+    uint16_t webPort = 8080;
+    bool enableWeb = false;
     std::string password;
 
     for (int i = 1; i < argc; ++i) {
@@ -60,35 +60,41 @@ int main(int argc, char** argv) {
             port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (std::strcmp(argv[i], "--password") == 0 && i + 1 < argc) {
             password = argv[++i];
+        } else if (std::strcmp(argv[i], "--web") == 0) {
+            enableWeb = true;
+        } else if (std::strcmp(argv[i], "--web-port") == 0 && i + 1 < argc) {
+            webPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+            enableWeb = true;
         }
     }
 
     if (headless) {
-        // Headless 模式: 纯服务端，无 GUI，适合 Linux 服务器部署
         std::printf("myDesk headless service starting on port %u...\n", port);
+        if (enableWeb) {
+            std::printf("Web server will be available on port %u\n", webPort);
+        }
         rd::HeadlessService svc;
         if (!password.empty()) svc.setPassword(password);
         return svc.run(port);
     }
 
-    // GUI 模式: 隐藏控制台窗口
+    // GUI 模式
     hideConsoleWindow();
 
-    // HiDPI 缩放必须在 QApplication 创建之前设置
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 
     QApplication app(argc, argv);
     app.setApplicationName("myDesk");
     app.setOrganizationName("myDesk");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion("1.1.0");
 
-    // 根据屏幕 DPI 计算基准字号，确保在各种分辨率下清晰可读
+    // HiDPI 字号
     int baseFontSize = 14;
     if (auto* screen = app.primaryScreen()) {
         const qreal dpi = screen->logicalDotsPerInch();
-        if (dpi >= 144) baseFontSize = 16;  // 150% 缩放
-        else if (dpi >= 120) baseFontSize = 15;  // 125% 缩放
+        if (dpi >= 144) baseFontSize = 16;
+        else if (dpi >= 120) baseFontSize = 15;
     }
 
     app.setStyleSheet(QString(R"(
@@ -111,7 +117,7 @@ int main(int argc, char** argv) {
         QLineEdit {
             border: 1px solid #dfe6e9;
             border-radius: 4px;
-            padding: 10px;
+            padding: 8px;
             font-size: %1px;
         }
         QLineEdit:focus {
@@ -120,7 +126,7 @@ int main(int argc, char** argv) {
         QComboBox {
             border: 1px solid #dfe6e9;
             border-radius: 4px;
-            padding: 8px;
+            padding: 6px;
             font-size: %1px;
         }
         QLabel {
@@ -128,6 +134,13 @@ int main(int argc, char** argv) {
         }
         QPushButton {
             font-size: %1px;
+        }
+        QTabWidget::pane {
+            border: 1px solid #dfe6e9;
+        }
+        QSplitter::handle {
+            background-color: #ecf0f1;
+            width: 2px;
         }
     )")
                           .arg(baseFontSize)

@@ -15,6 +15,13 @@ Tech stack: **C++17 + CMake + Qt5**, video codec via FFmpeg, NAT traversal via W
 - **H.264 Streaming** - Low latency video with libx264 zerolatency tuning
 - **Input Injection** - Full mouse + keyboard remote control
 - **Authentication** - Password verification before allowing control
+- **Web Remote Desktop** - HTML5 + WebSocket based viewer (browser access)
+- **Account System** - Login with username/password, Developer/User modes
+- **Developer Mode** - Detailed log panel with one-click copy for debugging
+- **User Mode** - Simplified interface for end users
+- **File Transfer** - Drag & drop files, bidirectional transfer, save to chosen directory
+- **Voice Call** - Audio communication with mute/unmute (can work with or without video)
+- **Device List** - Save frequently connected devices for one-click reconnect
 
 ## Quick Start
 
@@ -49,7 +56,7 @@ cmake --build build -j
 
 | App | Description |
 |-----|-------------|
-| **mydesk** | Unified client (ToDesk-like GUI, bidirectional control) |
+| **mydesk** | Unified client (ToDesk-like GUI, bidirectional control, web service) |
 | host | CLI host (be controlled via LAN or P2P) |
 | viewer | CLI viewer (control remote via LAN or P2P, SDL2 display) |
 | gui_viewer | Qt5 viewer-only GUI |
@@ -61,10 +68,51 @@ cmake --build build -j
 
 Launch `mydesk` on both machines:
 
-1. **Machine A** (to be controlled): Note the Device ID and Temporary Password shown on the left panel
-2. **Machine B** (controller): Enter Machine A's IP (LAN mode) or Device ID (P2P mode) + password on the right panel, click Connect
+1. **Login** - Enter username/password (or skip for dev mode)
+2. **Machine A** (to be controlled): Note the Device ID and Temporary Password shown on the left panel
+3. **Machine B** (controller): Enter Machine A's IP (LAN mode) or Device ID (P2P mode) + password, click Connect
 
-Both machines run the same program - each is simultaneously a potential host and viewer.
+### Command Line Options
+
+```bash
+mydesk                          # GUI mode (default)
+mydesk --headless               # Headless service mode (no GUI)
+mydesk --headless --port 9000   # Headless on custom port
+mydesk --web                    # Enable web server (port 8080)
+mydesk --web --web-port 9090    # Web server on custom port
+```
+
+### Web Remote Desktop
+
+When web server is enabled (via GUI toggle or `--web` flag), open a browser to:
+```
+http://<host-ip>:8080
+```
+Enter the password to start remote control via browser.
+
+### Developer vs User Mode
+
+- **Developer Mode** (default): Full interface with log panel, signal server config, detailed error messages, one-click log copy
+- **User Mode**: Simplified interface - just Device ID, password, and connect button
+
+### File Transfer
+
+- **Drag & Drop**: Drag files directly onto the File Transfer panel to send
+- **Browse**: Click "Send File" to select files
+- **Receive**: When remote sends a file, choose where to save it
+- **Bidirectional**: Both sides can send and receive
+
+### Voice Call
+
+- Click "Voice Call" button to start audio communication
+- Audio works independently of video - can have voice-only or voice+video
+- Mute/unmute supported
+
+### Saved Devices
+
+- Successfully connected devices are automatically saved
+- Double-click a saved device for one-click reconnect
+- Device list is stored locally in `~/.config/myDesk/devices.json`
 
 ## Usage: CLI Mode
 
@@ -102,9 +150,17 @@ myDesk/
 │   │   ├── input/              # Input injection (XTest/SendInput/CGEvent)
 │   │   ├── net/                # TCP + message framing
 │   │   ├── p2p/                # WebRTC transport (libdatachannel)
-│   │   └── signal/             # Signal client
+│   │   ├── signal/             # Signal client
+│   │   ├── file_transfer/      # File transfer protocol
+│   │   └── audio/              # Audio capture/playback
 │   └── apps/
 │       ├── mydesk/             # ★ Unified client (Qt5, bidirectional)
+│       │   ├── account_manager # Login/logout, mode management
+│       │   ├── device_list_manager # Saved devices persistence
+│       │   ├── log_panel       # Developer log display
+│       │   ├── login_dialog    # Login/register UI
+│       │   ├── file_transfer_widget # File transfer UI (drag & drop)
+│       │   └── web_server      # HTTP + WebSocket server
 │       ├── host/               # CLI host
 │       ├── viewer/             # CLI viewer (SDL2)
 │       ├── gui_viewer/         # Qt5 viewer-only
@@ -121,12 +177,34 @@ Message types:
 - Input (2): Mouse/keyboard events (13 bytes fixed format)
 - Auth (20/21/22): Password authentication handshake
 - Signal (10-14): P2P pairing and relay
+- File (30-35): File transfer (offer/accept/reject/data/complete/cancel)
+- Audio (40-41): Voice data and control
+
+## Account System
+
+The account system currently uses local validation for development. The architecture is ready for server integration:
+
+- **Login API**: `POST /api/login { username, password }` → `{ token, mode }`
+- **Register API**: `POST /api/register { username, password, email }`
+- **Logout API**: `POST /api/logout { token }`
+
+Set server URL via `AccountManager::setServerUrl()`. The login dialog supports both login and registration, with a "Skip Login" option for development.
 
 ## TODO
 
+- [x] Web remote desktop (HTML5 + WebSocket)
+- [x] Account login system
+- [x] Developer/User mode
+- [x] Developer log panel with copy
+- [x] File transfer with drag & drop
+- [x] Voice call framework
+- [x] Device list with one-click connect
+- [ ] Server-side account API deployment
+- [ ] Opus audio codec integration
+- [ ] PortAudio cross-platform audio capture
+- [ ] WebCodecs H.264 for web viewer (replace JPEG)
 - [ ] TURN relay fallback for symmetric NAT
 - [ ] TLS on signaling + device authentication
-- [ ] File transfer
 - [ ] Clipboard sync
 - [ ] Multi-monitor support
 - [ ] DXGI Desktop Duplication (Windows high-perf capture)

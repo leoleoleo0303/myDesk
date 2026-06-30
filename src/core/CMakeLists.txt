@@ -51,6 +51,29 @@ elseif(UNIX)
     target_link_libraries(rdcore PRIVATE ${X11_LIBRARIES} ${X11_XTest_LIB})
 endif()
 
+# ---- rdfiletransfer: 文件传输模块 ----
+add_library(rdfiletransfer
+    file_transfer/file_transfer.cpp
+)
+target_include_directories(rdfiletransfer PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(rdfiletransfer PUBLIC rdnet)
+find_package(Qt5 COMPONENTS Core QUIET)
+if(Qt5_FOUND)
+    target_link_libraries(rdfiletransfer PUBLIC Qt5::Core)
+    set_target_properties(rdfiletransfer PROPERTIES AUTOMOC ON)
+endif()
+
+# ---- rdaudio: 音频模块 ----
+add_library(rdaudio
+    audio/audio_manager.cpp
+)
+target_include_directories(rdaudio PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(rdaudio PUBLIC rdnet)
+if(Qt5_FOUND)
+    target_link_libraries(rdaudio PUBLIC Qt5::Core)
+    set_target_properties(rdaudio PROPERTIES AUTOMOC ON)
+endif()
+
 # ---- rdp2p: WebRTC P2P 传输（依赖 libdatachannel） ----
 if(RD_ENABLE_P2P)
     add_library(rdp2p
