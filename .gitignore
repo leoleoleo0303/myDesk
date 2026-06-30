@@ -1,0 +1,17 @@
+# 构建产物
+/build/
+*.o
+*.a
+*.so
+*.dll
+*.exe
+
+# 采集输出
+*.ppm
+*.png
+
+# IDE / 工具
+.cache/
+.vscode/
+.idea/
+compile_commands.json
