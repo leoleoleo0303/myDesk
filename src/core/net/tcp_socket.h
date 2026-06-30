@@ -31,6 +31,9 @@ public:
     bool valid() const;
     void close();
 
+    // 获取底层 socket handle（用于设置 socket 选项）
+    SocketHandle handle() const { return fd_; }
+
     // 完整发送 len 字节，失败（含对端断开）返回 false。
     bool sendAll(const void* data, size_t len);
     // 完整接收 len 字节，对端关闭或出错返回 false。

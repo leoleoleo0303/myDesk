@@ -42,7 +42,7 @@ bool HostService::registerP2P(const std::string& signalHost,
     });
     return true;
 #else
-    emit p2pRegisterFailed("P2P not enabled (build without RD_ENABLE_P2P)");
+    emit p2pRegisterFailed("P2P not enabled. Rebuild with: cmake -DRD_ENABLE_P2P=ON .. (requires libdatachannel)");
     return false;
 #endif
 }
@@ -175,9 +175,9 @@ void HostService::handleClient(std::unique_ptr<IChannel> ch) {
     H264Encoder::Config cfg;
     cfg.width = frame.width;
     cfg.height = frame.height;
-    cfg.fps = 30;
-    cfg.bitrateKbps = 8000;
-    cfg.gopSize = 60;
+    cfg.fps = 60;
+    cfg.bitrateKbps = 12000;
+    cfg.gopSize = 120;
     if (!enc.open(cfg)) {
         clientCount_.fetch_sub(1);
         emit clientDisconnected();
@@ -188,12 +188,17 @@ void HostService::handleClient(std::unique_ptr<IChannel> ch) {
     if (injector) injector->init(frame.width, frame.height);
 
     std::atomic<bool> sessionRunning{true};
+
+    // 输入接收线程 — 独立于视频发送循环，保证输入不被阻塞
     std::thread inputThread([&]() {
         net::MsgType type;
         std::vector<uint8_t> payload;
         while (sessionRunning.load()) {
             if (!ch->recvMessage(type, payload, 100)) {
-                if (!ch->isConnected()) break;
+                if (!ch->isConnected()) {
+                    sessionRunning.store(false);
+                    break;
+                }
                 continue;
             }
             if (type == net::MsgType::Input && injector) {
@@ -205,7 +210,8 @@ void HostService::handleClient(std::unique_ptr<IChannel> ch) {
         }
     });
 
-    const auto interval = std::chrono::milliseconds(1000 / 30);
+    constexpr int kTargetFps = 60;
+    const auto interval = std::chrono::microseconds(1000000 / kTargetFps);
     std::vector<EncodedPacket> packets;
 
     while (running_.load() && sessionRunning.load()) {
@@ -227,8 +233,9 @@ void HostService::handleClient(std::unique_ptr<IChannel> ch) {
         if (!peerAlive) break;
 
         const auto elapsed = std::chrono::steady_clock::now() - t0;
-        if (elapsed < interval)
+        if (elapsed < interval) {
             std::this_thread::sleep_for(interval - elapsed);
+        }
     }
 
     sessionRunning.store(false);

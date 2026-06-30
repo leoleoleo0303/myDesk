@@ -5,6 +5,14 @@
 #include <mutex>
 #include <vector>
 
+#if defined(_WIN32)
+#include <winsock2.h>
+#else
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <cerrno>
+#endif
+
 #include "core/net/message.h"
 #include "core/net/tcp_socket.h"
 
@@ -21,7 +29,7 @@ public:
                              uint32_t len) = 0;
 
     // 接收一条消息。timeoutMs<0 表示阻塞直到有消息或断开；
-    // 超时返回 false（payload 不变）。
+    // timeoutMs>0 时先用 select 等待可读，超时返回 false（payload 不变）。
     virtual bool recvMessage(net::MsgType& type, std::vector<uint8_t>& payload,
                              int timeoutMs) = 0;
 
@@ -44,9 +52,30 @@ public:
         return true;
     }
 
-    // TCP 为阻塞读，忽略 timeoutMs。
     bool recvMessage(net::MsgType& type, std::vector<uint8_t>& payload,
-                     int /*timeoutMs*/) override {
+                     int timeoutMs) override {
+        // 使用 select 实现超时等待，避免 SO_RCVTIMEO 在 recvAll 中间
+        // 截断导致帧错乱。select 返回可读后再进行完整阻塞读。
+        if (timeoutMs > 0) {
+            auto sock = static_cast<SOCKET>(conn_.handle());
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            FD_SET(sock, &readfds);
+
+            struct timeval tv;
+            tv.tv_sec = timeoutMs / 1000;
+            tv.tv_usec = (timeoutMs % 1000) * 1000;
+
+            int ret = ::select(static_cast<int>(sock) + 1, &readfds,
+                               nullptr, nullptr, &tv);
+            if (ret <= 0) {
+                // ret == 0: timeout; ret < 0: error
+                if (ret < 0) open_.store(false);
+                return false;
+            }
+            // 数据已就绪，继续阻塞读取完整消息
+        }
+
         if (!net::recvMessage(conn_, type, payload)) {
             open_.store(false);
             return false;

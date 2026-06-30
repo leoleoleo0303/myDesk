@@ -20,8 +20,8 @@
 .PARAMETER AppArgs
     Arguments passed to the app (just append them after the app name)
 
-.PARAMETER P2P
-    Enable WebRTC P2P (needs extra deps; off by default)
+.PARAMETER NoP2P
+    Disable WebRTC P2P (P2P is enabled by default)
 
 .PARAMETER NoLaunch
     Skip auto-launch after build (for CI or scripted usage)
@@ -47,7 +47,7 @@ param(
 
     [string]$App,
 
-    [switch]$P2P,
+    [switch]$NoP2P,
 
     [switch]$NoLaunch,
 
@@ -122,7 +122,7 @@ function Get-ConfiguredP2PState {
 
 function Invoke-Configure {
     Set-BuildEnvironment
-    $p2pFlag = if ($P2P) { 'ON' } else { 'OFF' }
+    $p2pFlag = if ($NoP2P) { 'OFF' } else { 'ON' }
     Write-Host ">> Configuring CMake (P2P=$p2pFlag)..." -ForegroundColor Cyan
     & $CMakeExe -S $Root -B $BuildDir -G 'Visual Studio 17 2022' -A x64 `
         "-DCMAKE_TOOLCHAIN_FILE=$Toolchain" `
@@ -134,7 +134,7 @@ function Invoke-Configure {
 function Invoke-Build {
     Set-BuildEnvironment
 
-    $expectedP2P = if ($P2P) { 'ON' } else { 'OFF' }
+    $expectedP2P = if ($NoP2P) { 'OFF' } else { 'ON' }
     $cache = Join-Path $BuildDir 'CMakeCache.txt'
     if (-not (Test-Path $cache) -or (Get-ConfiguredP2PState) -ne $expectedP2P) {
         Invoke-Configure

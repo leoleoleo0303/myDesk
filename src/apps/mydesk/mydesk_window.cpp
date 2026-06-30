@@ -52,6 +52,7 @@ MyDeskWindow::MyDeskWindow() {
             [this]() {
                 p2pStatusLabel_->setText("● P2P registered (ready)");
                 p2pStatusLabel_->setStyleSheet("color: #27ae60;");
+                p2pErrorEdit_->setVisible(false);
                 p2pRegisterBtn_->setText("Re-register");
                 p2pRegisterBtn_->setEnabled(true);
             });
@@ -59,6 +60,9 @@ MyDeskWindow::MyDeskWindow() {
             [this](const QString& msg) {
                 p2pStatusLabel_->setText("● P2P: " + msg);
                 p2pStatusLabel_->setStyleSheet("color: #e74c3c;");
+                p2pStatusLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+                p2pErrorEdit_->setText(msg);
+                p2pErrorEdit_->setVisible(true);
                 p2pRegisterBtn_->setEnabled(true);
             });
 
@@ -176,6 +180,17 @@ QWidget* MyDeskWindow::buildLeftPanel() {
     p2pStatusLabel_ = new QLabel("● P2P not registered");
     p2pStatusLabel_->setStyleSheet("color: #999;");
     layout->addWidget(p2pStatusLabel_);
+
+    // Copyable error text field (hidden by default, shown on error)
+    p2pErrorEdit_ = new QLineEdit;
+    p2pErrorEdit_->setReadOnly(true);
+    p2pErrorEdit_->setVisible(false);
+    p2pErrorEdit_->setStyleSheet(
+        "QLineEdit { background-color: #ffeaea; color: #c0392b; "
+        "border: 1px solid #e74c3c; border-radius: 3px; padding: 4px; "
+        "font-size: 11px; }");
+    p2pErrorEdit_->setPlaceholderText("Error details will appear here");
+    layout->addWidget(p2pErrorEdit_);
 
     layout->addStretch();
 

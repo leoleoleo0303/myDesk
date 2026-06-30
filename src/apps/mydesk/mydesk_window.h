@@ -63,6 +63,7 @@ private:
     QLineEdit* signalHostEdit_ = nullptr;
     QLineEdit* signalPortEdit_ = nullptr;
     QPushButton* p2pRegisterBtn_ = nullptr;
+    QLineEdit* p2pErrorEdit_ = nullptr;  // Copyable error message field
 
     // Right panel - connection
     QComboBox* modeBox_ = nullptr;

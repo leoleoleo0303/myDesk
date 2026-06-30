@@ -57,10 +57,20 @@ ViewerWidget::ViewerWidget(QWidget* parent) : QWidget(parent) {
     setMouseTracking(true);
     setAttribute(Qt::WA_OpaquePaintEvent);
     setMinimumSize(320, 240);
+    fpsTimer_.start();
 }
 
 void ViewerWidget::setFrame(const QImage& img) {
     frame_ = img;
+
+    // FPS 统计
+    ++frameCount_;
+    if (fpsTimer_.elapsed() >= 1000) {
+        displayFps_ = frameCount_;
+        frameCount_ = 0;
+        fpsTimer_.restart();
+    }
+
     update();
 }
 
@@ -68,8 +78,25 @@ void ViewerWidget::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.fillRect(rect(), Qt::black);
     if (!frame_.isNull()) {
-        p.drawImage(rect(), frame_);
+        // 保持宽高比绘制
+        const QSize imgSize = frame_.size().scaled(size(), Qt::KeepAspectRatio);
+        const int x = (width() - imgSize.width()) / 2;
+        const int y = (height() - imgSize.height()) / 2;
+        p.drawImage(QRect(x, y, imgSize.width(), imgSize.height()), frame_);
     }
+
+    // 左上角绘制 FPS
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(0, 0, 0, 160));
+    const QString fpsText = QString("FPS: %1").arg(displayFps_);
+    QFont fpsFont("Consolas", 12, QFont::Bold);
+    p.setFont(fpsFont);
+    QFontMetrics fm(fpsFont);
+    const QRect textRect = fm.boundingRect(fpsText);
+    const QRect bgRect(4, 4, textRect.width() + 12, textRect.height() + 8);
+    p.drawRoundedRect(bgRect, 4, 4);
+    p.setPen(QColor(0, 255, 0));
+    p.drawText(bgRect, Qt::AlignCenter, fpsText);
 }
 
 void ViewerWidget::mouseMoveEvent(QMouseEvent* e) {

@@ -26,13 +26,20 @@ WORD keysymToVK(uint32_t keysym) {
         case 0xff55: return VK_PRIOR;
         case 0xff56: return VK_NEXT;
         case 0xff57: return VK_END;
+        case 0xff63: return VK_INSERT;
         case 0xffe1: return VK_LSHIFT;
         case 0xffe2: return VK_RSHIFT;
         case 0xffe3: return VK_LCONTROL;
         case 0xffe4: return VK_RCONTROL;
+        case 0xffe5: return VK_CAPITAL;
         case 0xffe9: return VK_LMENU;
         case 0xffea: return VK_RMENU;
+        case 0x20:   return VK_SPACE;
         default: break;
+    }
+    // F1 ~ F12: keysym 0xffbe ~ 0xffc9
+    if (keysym >= 0xffbe && keysym <= 0xffc9) {
+        return static_cast<WORD>(VK_F1 + (keysym - 0xffbe));
     }
     // 可打印 ASCII
     if (keysym >= 0x20 && keysym <= 0x7e) {
@@ -48,7 +55,7 @@ void sendMouse(DWORD flags, LONG x = 0, LONG y = 0, DWORD data = 0) {
     in.mi.dx = x;
     in.mi.dy = y;
     in.mi.mouseData = data;
-    in.mi.dwFlags = flags;
+    in.mi.dwFlags = flags | MOUSEEVENTF_VIRTUALDESK;
     SendInput(1, &in, sizeof(INPUT));
 }
 

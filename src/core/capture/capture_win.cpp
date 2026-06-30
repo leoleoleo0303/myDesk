@@ -9,48 +9,84 @@ namespace rd {
 WinScreenCapture::~WinScreenCapture() { shutdown(); }
 
 bool WinScreenCapture::init() {
-    return true;  // GDI 无需显式初始化
+    // 预先获取屏幕尺寸，创建复用的 DC 和 bitmap，避免每帧都创建/销毁
+    width_ = GetSystemMetrics(SM_CXSCREEN);
+    height_ = GetSystemMetrics(SM_CYSCREEN);
+    if (width_ <= 0 || height_ <= 0) return false;
+
+    hScreenDC_ = GetDC(nullptr);
+    if (!hScreenDC_) return false;
+
+    hMemDC_ = CreateCompatibleDC(hScreenDC_);
+    if (!hMemDC_) return false;
+
+    hBitmap_ = CreateCompatibleBitmap(hScreenDC_, width_, height_);
+    if (!hBitmap_) return false;
+
+    hOldObj_ = SelectObject(hMemDC_, hBitmap_);
+
+    bi_ = {};
+    bi_.biSize = sizeof(BITMAPINFOHEADER);
+    bi_.biWidth = width_;
+    bi_.biHeight = -height_;  // top-down
+    bi_.biPlanes = 1;
+    bi_.biBitCount = 32;
+    bi_.biCompression = BI_RGB;
+
+    // 预分配帧缓冲
+    bufferSize_ = static_cast<size_t>(width_) * height_ * 4;
+
+    return true;
 }
 
 bool WinScreenCapture::captureFrame(Frame& out) {
-    const int width = GetSystemMetrics(SM_CXSCREEN);
-    const int height = GetSystemMetrics(SM_CYSCREEN);
-    if (width <= 0 || height <= 0) return false;
+    if (!hMemDC_) return false;
 
-    HDC hScreen = GetDC(nullptr);
-    HDC hMemDC = CreateCompatibleDC(hScreen);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hScreen, width, height);
-    HGDIOBJ oldObj = SelectObject(hMemDC, hBitmap);
+    // 检查分辨率是否变化
+    const int curW = GetSystemMetrics(SM_CXSCREEN);
+    const int curH = GetSystemMetrics(SM_CYSCREEN);
+    if (curW != width_ || curH != height_) {
+        shutdown();
+        if (!init()) return false;
+    }
 
-    BitBlt(hMemDC, 0, 0, width, height, hScreen, 0, 0, SRCCOPY);
+    BitBlt(hMemDC_, 0, 0, width_, height_, hScreenDC_, 0, 0, SRCCOPY);
 
-    BITMAPINFOHEADER bi{};
-    bi.biSize = sizeof(BITMAPINFOHEADER);
-    bi.biWidth = width;
-    bi.biHeight = -height;  // 负数 = top-down，行序与我们的 Frame 一致
-    bi.biPlanes = 1;
-    bi.biBitCount = 32;     // 32 位 DIB 字节序为 BGRA，正好匹配我们的格式
-    bi.biCompression = BI_RGB;
-
-    out.width = width;
-    out.height = height;
-    out.stride = width * Frame::bytesPerPixel();
+    out.width = width_;
+    out.height = height_;
+    out.stride = width_ * Frame::bytesPerPixel();
     out.format = PixelFormat::BGRA;
-    out.data.resize(static_cast<size_t>(out.stride) * height);
 
-    const int scanned = GetDIBits(hMemDC, hBitmap, 0, height, out.data.data(),
-                                  reinterpret_cast<BITMAPINFO*>(&bi),
+    // 复用已有的 buffer，避免每帧 malloc
+    if (out.data.size() != bufferSize_) {
+        out.data.resize(bufferSize_);
+    }
+
+    const int scanned = GetDIBits(hMemDC_, hBitmap_, 0, height_,
+                                  out.data.data(),
+                                  reinterpret_cast<BITMAPINFO*>(&bi_),
                                   DIB_RGB_COLORS);
-
-    SelectObject(hMemDC, oldObj);
-    DeleteObject(hBitmap);
-    DeleteDC(hMemDC);
-    ReleaseDC(nullptr, hScreen);
-
     return scanned != 0;
 }
 
-void WinScreenCapture::shutdown() {}
+void WinScreenCapture::shutdown() {
+    if (hOldObj_ && hMemDC_) {
+        SelectObject(hMemDC_, hOldObj_);
+        hOldObj_ = nullptr;
+    }
+    if (hBitmap_) {
+        DeleteObject(hBitmap_);
+        hBitmap_ = nullptr;
+    }
+    if (hMemDC_) {
+        DeleteDC(hMemDC_);
+        hMemDC_ = nullptr;
+    }
+    if (hScreenDC_) {
+        ReleaseDC(nullptr, hScreenDC_);
+        hScreenDC_ = nullptr;
+    }
+}
 
 }  // namespace rd
 

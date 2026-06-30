@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QImage>
 #include <QWidget>
 
@@ -8,6 +9,7 @@ class ViewerSession;
 }
 
 // Displays remote screen and captures mouse/keyboard input for remote control.
+// Shows FPS counter in top-left corner.
 class ViewerWidget : public QWidget {
     Q_OBJECT
 public:
@@ -33,4 +35,9 @@ private:
 
     QImage frame_;
     rd::ViewerSession* session_ = nullptr;
+
+    // FPS counter
+    int frameCount_ = 0;
+    int displayFps_ = 0;
+    QElapsedTimer fpsTimer_;
 };
