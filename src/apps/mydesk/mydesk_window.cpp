@@ -1,6 +1,8 @@
 #include "mydesk_window.h"
 
 #include <QComboBox>
+#include <QDateTime>
+#include <QFileDialog>
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
@@ -14,11 +16,14 @@
 #include <QScreen>
 #include <QSplitter>
 #include <QStackedWidget>
+#include <QStandardPaths>
 #include <QTabWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "account_manager.h"
 #include "core/audio/audio_manager.h"
+#include "core/capture/screen_recorder.h"
 #include "core/file_transfer/file_transfer.h"
 #include "device_list_manager.h"
 #include "file_transfer_widget.h"
@@ -40,6 +45,7 @@ MyDeskWindow::MyDeskWindow() {
     fileTransferMgr_ = new rd::FileTransferManager(this);
     audioMgr_ = new rd::AudioManager(this);
     webServer_ = new rd::WebServer(this);
+    screenRecorder_ = new rd::ScreenRecorder();
 
     identity_ = rd::DeviceIdentity::load();
 
@@ -128,6 +134,11 @@ MyDeskWindow::~MyDeskWindow() {
     webServer_->stop();
     audioMgr_->stopCapture();
     audioMgr_->stopPlayback();
+    if (screenRecorder_) {
+        screenRecorder_->stop();
+        delete screenRecorder_;
+        screenRecorder_ = nullptr;
+    }
     rd::setGlobalLogPanel(nullptr);
 }
 
@@ -326,6 +337,24 @@ QWidget* MyDeskWindow::buildLeftPanel() {
     audioStatusLabel_ = new QLabel("Audio: Off");
     audioStatusLabel_->setStyleSheet("color: #999; font-size: 11px;");
     layout->addWidget(audioStatusLabel_);
+
+    // 录屏控制
+    auto* recordRow = new QHBoxLayout;
+    recordBtn_ = new QPushButton("⏺ Record Screen");
+    recordBtn_->setFixedHeight(32);
+    recordBtn_->setCheckable(true);
+    recordBtn_->setStyleSheet(
+        "QPushButton { background-color: #e67e22; color: white; "
+        "border-radius: 4px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #d35400; }"
+        "QPushButton:checked { background-color: #c0392b; }");
+    connect(recordBtn_, &QPushButton::clicked, this, &MyDeskWindow::onRecordToggle);
+    recordRow->addWidget(recordBtn_);
+    layout->addLayout(recordRow);
+
+    recordStatusLabel_ = new QLabel("Recording: Off");
+    recordStatusLabel_->setStyleSheet("color: #999; font-size: 11px;");
+    layout->addWidget(recordStatusLabel_);
 
     return group;
 }
@@ -693,6 +722,88 @@ void MyDeskWindow::onWebServerToggle() {
             webServerBtn_->setText("Stop Web");
         } else {
             LOG_ERROR("Failed to start web server");
+        }
+    }
+}
+
+void MyDeskWindow::onRecordToggle() {
+    if (screenRecorder_->isRecording()) {
+        // 停止录制
+        screenRecorder_->stop();
+        recordBtn_->setChecked(false);
+        recordBtn_->setText("⏺ Record Screen");
+        recordStatusLabel_->setText("Recording: Off");
+        recordStatusLabel_->setStyleSheet("color: #999; font-size: 11px;");
+        if (recordTimer_) {
+            recordTimer_->stop();
+            delete recordTimer_;
+            recordTimer_ = nullptr;
+        }
+        LOG_INFO("Screen recording stopped");
+        QMessageBox::information(this, "Recording Saved",
+                                 "Screen recording has been saved.");
+    } else {
+        // 选择保存路径
+        const QString defaultDir =
+            QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+        const QString timestamp =
+            QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+        const QString defaultName =
+            QString("%1/mydesk_record_%2.mp4").arg(defaultDir, timestamp);
+
+        const QString filePath = QFileDialog::getSaveFileName(
+            this, "Save Recording", defaultName,
+            "MP4 Video (*.mp4);;All Files (*)");
+
+        if (filePath.isEmpty()) {
+            recordBtn_->setChecked(false);
+            return;
+        }
+
+        // 开始录制
+        screenRecorder_->setErrorCallback([this](const std::string& err) {
+            QMetaObject::invokeMethod(this, [this, err]() {
+                LOG_ERROR(QString("Recording error: %1").arg(
+                    QString::fromStdString(err)));
+                recordBtn_->setChecked(false);
+                recordBtn_->setText("⏺ Record Screen");
+                recordStatusLabel_->setText("Recording: Error");
+                recordStatusLabel_->setStyleSheet("color: #e74c3c; font-size: 11px;");
+                if (recordTimer_) {
+                    recordTimer_->stop();
+                    delete recordTimer_;
+                    recordTimer_ = nullptr;
+                }
+            });
+        });
+
+        rd::ScreenRecorder::Config cfg;
+        cfg.fps = 30;
+        cfg.bitrateKbps = 8000;
+
+        if (screenRecorder_->start(filePath.toStdString(), cfg)) {
+            recordBtn_->setChecked(true);
+            recordBtn_->setText("⏹ Stop Recording");
+            recordStatusLabel_->setText("Recording: 00:00");
+            recordStatusLabel_->setStyleSheet("color: #e74c3c; font-size: 11px; font-weight: bold;");
+            LOG_INFO(QString("Screen recording started: %1").arg(filePath));
+
+            // 定时器更新录制时长显示
+            recordTimer_ = new QTimer(this);
+            connect(recordTimer_, &QTimer::timeout, this, [this]() {
+                if (!screenRecorder_->isRecording()) return;
+                const double secs = screenRecorder_->durationSeconds();
+                const int mins = static_cast<int>(secs) / 60;
+                const int s = static_cast<int>(secs) % 60;
+                recordStatusLabel_->setText(
+                    QString("Recording: %1:%2")
+                        .arg(mins, 2, 10, QChar('0'))
+                        .arg(s, 2, 10, QChar('0')));
+            });
+            recordTimer_->start(1000);
+        } else {
+            recordBtn_->setChecked(false);
+            LOG_ERROR("Failed to start screen recording");
         }
     }
 }

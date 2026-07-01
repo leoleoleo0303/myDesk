@@ -9,9 +9,10 @@ if(WIN32)
     target_link_libraries(rdnet PUBLIC ws2_32)
 endif()
 
-# rdcore: 跨平台远程桌面核心库（采集 + 编解码 + 输入），依赖 rdnet
+# rdcore: 跨平台远程桌面核心库（采集 + 编解码 + 输入 + 录屏），依赖 rdnet
 add_library(rdcore
     capture/screen_capture.cpp
+    capture/screen_recorder.cpp
     codec/h264_encoder.cpp
     codec/h264_decoder.cpp
     input/input_event.cpp
@@ -20,10 +21,10 @@ add_library(rdcore
 target_include_directories(rdcore PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(rdcore PUBLIC rdnet)
 
-# FFmpeg（编解码 + 色彩空间转换）
+# FFmpeg（编解码 + 色彩空间转换 + 封装）
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
-    libavcodec libavutil libswscale)
+    libavcodec libavutil libswscale libavformat)
 target_link_libraries(rdcore PUBLIC PkgConfig::FFMPEG)
 
 if(WIN32)

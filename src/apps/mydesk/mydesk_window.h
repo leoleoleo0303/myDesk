@@ -15,6 +15,7 @@ class QComboBox;
 class QStackedWidget;
 class QTabWidget;
 class QListWidget;
+class QTimer;
 class ViewerWidget;
 
 namespace rd {
@@ -24,6 +25,7 @@ class FileTransferManager;
 class AudioManager;
 class WebServer;
 class LogPanel;
+class ScreenRecorder;
 }  // namespace rd
 
 class FileTransferWidget;
@@ -63,6 +65,7 @@ private slots:
     void onModeChanged(int mode);
     void onAudioToggle();
     void onWebServerToggle();
+    void onRecordToggle();
 
 private:
     QWidget* buildMainPage();
@@ -121,6 +124,11 @@ private:
     QPushButton* webServerBtn_ = nullptr;
     QLabel* webServerStatus_ = nullptr;
 
+    // 录屏控制
+    QPushButton* recordBtn_ = nullptr;
+    QLabel* recordStatusLabel_ = nullptr;
+    QTimer* recordTimer_ = nullptr;
+
     // 用户信息
     QLabel* userInfoLabel_ = nullptr;
     QPushButton* logoutBtn_ = nullptr;
@@ -135,5 +143,6 @@ private:
     rd::FileTransferManager* fileTransferMgr_ = nullptr;
     rd::AudioManager* audioMgr_ = nullptr;
     rd::WebServer* webServer_ = nullptr;
+    rd::ScreenRecorder* screenRecorder_ = nullptr;
     std::thread connectThread_;
 };
